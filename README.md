@@ -1,67 +1,75 @@
 # 🧟 ZombieWaves — Unity Endless Zombie Survival
 
-لعبة زومبي لا تنتهي مبنية على Unity مع ذكاء اصطناعي حقيقي للأعداء.
+لعبة زومبي لا تنتهي — الزومبي بيتولد تلقائياً، بيتكلم، وبيلاحقك!
 
 ---
 
-## 📁 ملفات المشروع
+## 🚀 طريقة التشغيل (3 خطوات بس!)
+
+### الخطوة 1 — حمّل الملفات
+```
+git clone https://github.com/yassenfayad2-png/ZombieWaves-Unity
+```
+
+### الخطوة 2 — افتح المشروع في Unity
+- افتح Unity Hub
+- اضغط **Open** واختار فولدر المشروع
+- انتظر Unity يحمّل
+
+### الخطوة 3 — اعمل NavMesh (مهم جداً!)
+1. افتح القائمة: **Window → AI → Navigation**
+2. اضغط على **Bake**
+3. خلاص! اضغط **Play** 🎮
+
+---
+
+## 📁 السكريبتس
 
 | ملف | الوظيفة |
 |-----|---------|
-| `ZombieAI.cs` | ذكاء الزومبي — يطارد / يهاجم / يتكلم |
-| `ZombieSpawner.cs` | يولّد موجات لا نهائية من الزومبي |
-| `PlayerController.cs` | حركة اللاعب والإطلاق |
-| `PlayerHealth.cs` | صحة اللاعب |
-| `Bullet.cs` | الرصاصة وتأثيرها على الزومبي |
-| `UIManager.cs` | واجهة المستخدم — موجات، game over |
+| `GameBootstrap.cs` | يبني كل اللعبة تلقائياً — أرض، لاعب، مجسمات، UI، كاميرا |
+| `ZombieAI.cs` | ذكاء الزومبي — يتجول، يلاحق، يهاجم، يتكلم عربي 😄 |
+| `ZombieSpawner.cs` | موجات لا نهائية تلقائية، كل موجة أصعب |
+| `PlayerController.cs` | حركة اللاعب وإطلاق النار (Raycast) |
+| `PlayerHealth.cs` | صحة اللاعب مع flash أحمر |
+| `UIManager.cs` | واجهة المستخدم |
+| `ThirdPersonCamera.cs` | كاميرا تتبع اللاعب |
 
 ---
 
-## 🚀 طريقة التثبيت في Unity
+## ⚙️ إعداد الـ Bootstrap (مرة واحدة بس)
 
-1. **افتح Unity Hub** وأنشئ مشروع جديد بـ 3D template.
-2. **حمّل الملفات** من GitHub وضعها في `Assets/Scripts/`.
-3. **أضف NavMesh** للأرض:
-   - اختار الأرض → Window → AI → Navigation → Bake.
-4. **اعمل Zombie Prefab**:
-   - Capsule أو model → أضف `NavMeshAgent` + `ZombieAI` + `Animator`.
-5. **اعمل Player**:
-   - Capsule → أضف `CharacterController` + `PlayerController` + `PlayerHealth`.
-6. **اعمل ZombieSpawner**:
-   - Empty GameObject → أضف `ZombieSpawner` → اسحب Zombie Prefab وSpawn Points.
-7. **اعمل UIManager**:
-   - Canvas → أضف `UIManager` → وصّل النصوص والـ panels.
+1. في Unity، اعمل **Empty GameObject** في الـ Scene
+2. سمّيه `Bootstrap`
+3. اسحب سكريبت `GameBootstrap.cs` عليه
+4. اضغط **Play** — هيبني كل حاجة تلقائياً!
+
+---
+
+## 🎮 التحكم
+
+| زر | الفعل |
+|----|-------|
+| WASD | حركة |
+| Mouse | دوران الكاميرا |
+| Left Click | إطلاق النار |
+| R | إعادة تعبئة السلاح |
+| Space | قفز |
+| Escape | فك قفل الماوس |
 
 ---
 
 ## 🤖 نظام الذكاء الاصطناعي
 
-### ZombieAI — State Machine
+**ZombieAI — 3 حالات:**
 ```
-Wander → (لما يحس باللاعب) → Chase → (لما يوصل) → Attack
+Wander (تجول) → Chase (ملاحقة) → Attack (هجوم)
 ```
 
-- **Wander:** يتمشى عشوائي على الـ NavMesh.
-- **Chase:** يجري ناحية اللاعب بسرعة أعلى.
-- **Attack:** يضرب اللاعب كل 1.2 ثانية.
-- **Dialogue:** كل 5 ثواني يقول جملة عربية مضحكة 😄
-
-### ZombieSpawner — Endless Waves
-- الموجة 1: 5 زومبي
-- الموجة 2: 8 زومبي (أقوى وأسرع)
-- الموجة 3: 11 زومبي... وهكذا إلى الأبد!
-
----
-
-## 🎮 Controls
-
-| زر | الفعل |
-|----|-------|
-| WASD | حركة |
-| Mouse | كاميرا |
-| Left Click | إطلاق |
-| R | إعادة تعبئة |
-| Space | قفز |
+**ZombieSpawner — موجات لا نهائية:**
+- موجة 1: 5 زومبي
+- موجة 2: 8 زومبي (أقوى + أسرع)
+- موجة 3: 11 زومبي... وهكذا إلى الأبد! 🔥
 
 ---
 

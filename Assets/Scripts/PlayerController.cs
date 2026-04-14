@@ -1,25 +1,25 @@
+using System.Collections;
 using UnityEngine;
 
 /// <summary>
-/// PlayerController — simple third-person movement + shooting.
-/// Requires: CharacterController, Camera tagged MainCamera.
+/// PlayerController — حركة اللاعب وإطلاق النار.
+/// WASD للحركة، Mouse للنظر، Click للإطلاق، R للتعبئة.
 /// </summary>
 [RequireComponent(typeof(CharacterController))]
 public class PlayerController : MonoBehaviour
 {
     [Header("Movement")]
     public float moveSpeed  = 6f;
-    public float turnSpeed  = 10f;
-    public float gravity    = -19.6f;
+    public float gravity    = -20f;
     public float jumpHeight = 1.5f;
 
     [Header("Shooting")]
-    public GameObject bulletPrefab;
-    public Transform  gunBarrel;
-    public float      bulletSpeed  = 30f;
-    public float      fireRate     = 0.25f;   // seconds between shots
-    public int        maxAmmo      = 30;
-    public float      reloadTime   = 1.5f;
+    public Transform gunBarrel;
+    public float     bulletSpeed  = 35f;
+    public float     fireRate     = 0.2f;
+    public int       maxAmmo      = 30;
+    public float     reloadTime   = 1.5f;
+    public float     bulletDamage = 34f;
 
     // ── internal ──────────────────────────────────────────────
     private CharacterController _cc;
@@ -35,32 +35,40 @@ public class PlayerController : MonoBehaviour
         _cam  = Camera.main;
         _ammo = maxAmmo;
         Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible   = false;
+        UpdateAmmoUI();
     }
 
     void Update()
     {
         Move();
         HandleShooting();
+
+        // Escape to unlock cursor
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible   = true;
+        }
     }
 
     // ── Movement ───────────────────────────────────────────────
     void Move()
     {
+        if (_cam == null) return;
+
         float h = Input.GetAxisRaw("Horizontal");
         float v = Input.GetAxisRaw("Vertical");
 
-        Vector3 camForward = _cam.transform.forward;
-        Vector3 camRight   = _cam.transform.right;
-        camForward.y = 0; camRight.y = 0;
-        camForward.Normalize(); camRight.Normalize();
+        Vector3 fwd   = _cam.transform.forward; fwd.y = 0; fwd.Normalize();
+        Vector3 right = _cam.transform.right;   right.y = 0; right.Normalize();
 
-        Vector3 move = (camForward * v + camRight * h).normalized;
+        Vector3 move = (fwd * v + right * h).normalized;
 
         if (move.magnitude > 0.1f)
         {
-            Quaternion targetRot = Quaternion.LookRotation(move);
-            transform.rotation = Quaternion.Slerp(transform.rotation, targetRot,
-                                                   turnSpeed * Time.deltaTime);
+            Quaternion target = Quaternion.LookRotation(move);
+            transform.rotation = Quaternion.Slerp(transform.rotation, target, 15f * Time.deltaTime);
         }
 
         if (_cc.isGrounded)
@@ -69,8 +77,8 @@ public class PlayerController : MonoBehaviour
             if (Input.GetButtonDown("Jump"))
                 _velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
         }
-
         _velocity.y += gravity * Time.deltaTime;
+
         _cc.Move((move * moveSpeed + new Vector3(0, _velocity.y, 0)) * Time.deltaTime);
     }
 
@@ -78,41 +86,71 @@ public class PlayerController : MonoBehaviour
     void HandleShooting()
     {
         _fireTimer -= Time.deltaTime;
-
         if (_reloading) return;
 
-        if (Input.GetKey(KeyCode.R) || _ammo <= 0)
+        if ((Input.GetKeyDown(KeyCode.R) || _ammo <= 0) && !_reloading)
         {
             StartCoroutine(Reload());
             return;
         }
 
         if (Input.GetButton("Fire1") && _fireTimer <= 0f && _ammo > 0)
-        {
             Shoot();
-        }
     }
 
     void Shoot()
     {
-        if (!bulletPrefab || !gunBarrel) return;
         _fireTimer = fireRate;
         _ammo--;
+        UpdateAmmoUI();
 
-        GameObject bullet = Instantiate(bulletPrefab, gunBarrel.position, gunBarrel.rotation);
-        bullet.GetComponent<Rigidbody>()?.AddForce(gunBarrel.forward * bulletSpeed, ForceMode.VelocityChange);
-        Destroy(bullet, 4f);
+        if (gunBarrel == null) return;
 
-        UIManager.Instance?.ShowMessage($"طلقات: {_ammo}/{maxAmmo}");
+        // Raycast shoot — instant hit detection
+        Ray ray = new Ray(gunBarrel.position, gunBarrel.forward);
+
+        // Also use camera direction for accuracy
+        if (Camera.main != null)
+        {
+            Ray camRay = Camera.main.ScreenPointToRay(new Vector3(Screen.width / 2, Screen.height / 2));
+            if (Physics.Raycast(camRay, out RaycastHit hit, 100f))
+            {
+                hit.collider.GetComponent<ZombieAI>()?.TakeDamage(bulletDamage);
+
+                // Visual bullet tracer
+                StartCoroutine(BulletTracer(gunBarrel.position, hit.point));
+            }
+            else
+            {
+                StartCoroutine(BulletTracer(gunBarrel.position, gunBarrel.position + gunBarrel.forward * 50f));
+            }
+        }
     }
 
-    System.Collections.IEnumerator Reload()
+    IEnumerator BulletTracer(Vector3 from, Vector3 to)
+    {
+        // Draw a line for a brief moment
+        float t = 0f;
+        while (t < 0.05f)
+        {
+            Debug.DrawLine(from, to, Color.yellow, 0.05f);
+            t += Time.deltaTime;
+            yield return null;
+        }
+    }
+
+    IEnumerator Reload()
     {
         _reloading = true;
-        UIManager.Instance?.ShowMessage("بيعبي السلاح...");
+        UIManager.Instance?.ShowMessage("⟳ بيعبي السلاح...");
         yield return new WaitForSeconds(reloadTime);
         _ammo      = maxAmmo;
         _reloading = false;
-        UIManager.Instance?.ShowMessage($"طلقات: {_ammo}/{maxAmmo}");
+        UpdateAmmoUI();
+    }
+
+    void UpdateAmmoUI()
+    {
+        UIManager.Instance?.ShowMessage($"🔫 طلقات: {_ammo}/{maxAmmo}");
     }
 }

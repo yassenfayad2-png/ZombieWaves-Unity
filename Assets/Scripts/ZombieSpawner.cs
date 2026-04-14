@@ -1,33 +1,34 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.AI;
 
 /// <summary>
-/// ZombieSpawner — endlessly spawns zombies in waves.
-/// Each wave is harder than the last (more zombies, faster, more health).
+/// ZombieSpawner — موجات لا نهائية من الزومبي.
+/// كل موجة أكثر وأقوى وأسرع.
+/// يشتغل تلقائياً — مش محتاج أي إعداد يدوي.
 /// </summary>
 public class ZombieSpawner : MonoBehaviour
 {
     public static ZombieSpawner Instance { get; private set; }
 
-    [Header("Prefabs & Points")]
+    [Header("Zombie")]
     public GameObject zombiePrefab;
-    public Transform[] spawnPoints;       // drag spawn positions here in Inspector
+    public Transform[] spawnPoints;
 
-    [Header("Wave Settings")]
-    public int   baseZombiesPerWave  = 5;
-    public float timeBetweenWaves    = 8f;
-    public float spawnInterval       = 0.8f;  // delay between each spawn in a wave
+    [Header("Wave Config")]
+    public int   baseCount        = 5;
+    public int   extraPerWave     = 3;
+    public float timeBetweenWaves = 8f;
+    public float spawnDelay       = 0.6f;
 
-    [Header("Scaling per Wave")]
-    public int   extraZombiesPerWave = 3;     // how many more zombies each wave
-    public float healthScalePerWave  = 20f;   // extra HP per wave
-    public float speedScalePerWave   = 0.2f;  // extra speed per wave
+    [Header("Scaling")]
+    public float extraHealthPerWave = 20f;
+    public float extraSpeedPerWave  = 0.3f;
 
     // ── internal ──────────────────────────────────────────────
-    private int   _currentWave      = 0;
-    private int   _zombiesAlive     = 0;
-    private int   _zombiesToSpawn   = 0;
-    private bool  _waveInProgress   = false;
+    private int  _wave        = 0;
+    private int  _aliveCount  = 0;
+    private bool _spawning    = false;
 
     void Awake()
     {
@@ -37,79 +38,100 @@ public class ZombieSpawner : MonoBehaviour
 
     void Start()
     {
+        // Wait a moment for the scene to finish building, then start
+        StartCoroutine(WaitAndStart());
+    }
+
+    IEnumerator WaitAndStart()
+    {
+        yield return new WaitForSeconds(1.5f);
         StartCoroutine(GameLoop());
     }
 
-    // ── Main Loop ──────────────────────────────────────────────
     IEnumerator GameLoop()
     {
-        while (true)   // endless game — never stops!
+        while (true)
         {
-            _currentWave++;
-            UIManager.Instance?.ShowWaveBanner(_currentWave);
+            _wave++;
+            UIManager.Instance?.ShowWaveBanner(_wave);
 
-            yield return new WaitForSeconds(3f); // show banner for 3 s
+            yield return new WaitForSeconds(3f);
 
-            yield return StartCoroutine(SpawnWave(_currentWave));
+            yield return StartCoroutine(SpawnWave(_wave));
 
-            // Wait until all zombies in this wave are dead
-            yield return new WaitUntil(() => _zombiesAlive <= 0);
+            // Wait for all zombies to die
+            yield return new WaitUntil(() => _aliveCount <= 0);
 
-            UIManager.Instance?.ShowMessage("الموجة انتهت! استعد...");
+            UIManager.Instance?.ShowMessage($"✅ الموجة {_wave} انتهت! استعد...");
+
             yield return new WaitForSeconds(timeBetweenWaves);
         }
     }
 
     IEnumerator SpawnWave(int wave)
     {
-        _waveInProgress = true;
-        _zombiesToSpawn  = baseZombiesPerWave + (wave - 1) * extraZombiesPerWave;
-        _zombiesAlive    = _zombiesToSpawn;
+        int count = baseCount + (wave - 1) * extraPerWave;
+        _aliveCount = count;
 
-        float extraHealth = (wave - 1) * healthScalePerWave;
-        float extraSpeed  = (wave - 1) * speedScalePerWave;
+        float extraHP    = (wave - 1) * extraHealthPerWave;
+        float extraSpeed = (wave - 1) * extraSpeedPerWave;
 
-        for (int i = 0; i < _zombiesToSpawn; i++)
+        UIManager.Instance?.ShowMessage($"موجة {wave} — {count} زومبي قادمين!");
+
+        for (int i = 0; i < count; i++)
         {
-            SpawnOneZombie(extraHealth, extraSpeed);
-            yield return new WaitForSeconds(spawnInterval);
+            SpawnOne(extraHP, extraSpeed);
+            yield return new WaitForSeconds(spawnDelay);
         }
-
-        _waveInProgress = false;
     }
 
-    void SpawnOneZombie(float extraHealth, float extraSpeed)
+    void SpawnOne(float extraHP, float extraSpeed)
     {
-        if (spawnPoints == null || spawnPoints.Length == 0)
+        if (zombiePrefab == null)
         {
-            Debug.LogWarning("No spawn points assigned to ZombieSpawner!");
+            Debug.LogError("ZombieSpawner: zombiePrefab is null!");
             return;
         }
 
-        Transform point = spawnPoints[Random.Range(0, spawnPoints.Length)];
-        GameObject go   = Instantiate(zombiePrefab, point.position, point.rotation);
+        // Pick a random spawn point
+        Vector3 pos;
+        if (spawnPoints != null && spawnPoints.Length > 0)
+        {
+            pos = spawnPoints[Random.Range(0, spawnPoints.Length)].position;
+        }
+        else
+        {
+            // Fallback: random edge of the arena
+            float side = Random.value > 0.5f ? 40f : -40f;
+            pos = new Vector3(side, 0, Random.Range(-40f, 40f));
+        }
 
-        ZombieAI ai = go.GetComponent<ZombieAI>();
+        // Make sure position is on NavMesh
+        if (NavMesh.SamplePosition(pos, out NavMeshHit hit, 5f, NavMesh.AllAreas))
+            pos = hit.position;
+
+        GameObject zombie = Instantiate(zombiePrefab, pos, Quaternion.identity);
+        zombie.SetActive(true);
+
+        var ai = zombie.GetComponent<ZombieAI>();
         if (ai != null)
         {
-            ai.health     += extraHealth;
-            ai.chaseSpeed += extraSpeed;
-            ai.wanderSpeed = Mathf.Min(ai.wanderSpeed + extraSpeed * 0.3f, 3f);
+            ai.health       += extraHP;
+            ai.chaseSpeed   += extraSpeed;
+            ai.wanderSpeed   = Mathf.Min(ai.wanderSpeed + extraSpeed * 0.3f, 3.5f);
         }
     }
 
-    // Called by ZombieAI.Die()
     public void OnZombieDied()
     {
-        _zombiesAlive = Mathf.Max(0, _zombiesAlive - 1);
+        _aliveCount = Mathf.Max(0, _aliveCount - 1);
     }
 
-    // ── Gizmos ─────────────────────────────────────────────────
     void OnDrawGizmos()
     {
         if (spawnPoints == null) return;
         Gizmos.color = Color.cyan;
         foreach (var p in spawnPoints)
-            if (p) Gizmos.DrawWireSphere(p.position, 0.5f);
+            if (p) Gizmos.DrawWireSphere(p.position, 1f);
     }
 }

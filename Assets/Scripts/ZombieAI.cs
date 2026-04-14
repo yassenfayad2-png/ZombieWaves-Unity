@@ -1,30 +1,29 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.AI;
 
 /// <summary>
-/// ZombieAI — controls zombie movement, detection, attacking, and AI dialogue.
-/// Attach to a Zombie prefab that has a NavMeshAgent component.
+/// ZombieAI — ذكاء الزومبي الكامل.
+/// يتجول، يحس باللاعب، يلاحقه، يهاجمه، ويتكلم!
 /// </summary>
 [RequireComponent(typeof(NavMeshAgent))]
 public class ZombieAI : MonoBehaviour
 {
     [Header("Detection")]
-    public float detectionRange = 15f;
-    public float attackRange = 1.8f;
-    public LayerMask playerLayer;
+    public float detectionRange = 20f;
+    public float attackRange    = 1.5f;
 
     [Header("Stats")]
-    public float health = 100f;
+    public float health       = 100f;
     public float attackDamage = 10f;
     public float attackCooldown = 1.2f;
 
     [Header("Speed")]
     public float wanderSpeed = 1.5f;
-    public float chaseSpeed = 4f;
+    public float chaseSpeed  = 4f;
 
-    [Header("Dialogue — AI Zombie Talk")]
-    public float talkInterval = 5f;         // seconds between zombie lines
-    public GameObject dialogueBubblePrefab; // optional: a world-space UI prefab
+    [Header("Dialogue")]
+    public float talkInterval = 5f;
 
     // ── internal ──────────────────────────────────────────────
     private NavMeshAgent _agent;
@@ -32,26 +31,27 @@ public class ZombieAI : MonoBehaviour
     private float        _attackTimer;
     private float        _talkTimer;
     private float        _wanderTimer;
-    private Vector3      _wanderTarget;
     private bool         _isDead;
 
     private enum State { Wander, Chase, Attack }
     private State _state = State.Wander;
 
-    // Pre-written AI-style zombie dialogue lines
-    private readonly string[] _zombieLines =
+    // جمل الزومبي بالعربي 😄
+    private readonly string[] _lines =
     {
         "بررررر... دماغ!!!",
         "لا تهرب... أنا بس عايز العشا!",
-        "ما لقتش أكل من زمان...",
         "جعان جداً... مشيييي!",
         "الدماغ... الدماغ... الدماغ...",
         "إنت فين يا إنسان؟!",
         "رائحتك وصلتلي من بعيييد...",
         "مش هتفلت منيييي!",
+        "أنا زومبي ذكي... أعرف أفكر!",
+        "جاي عليييك يا صاحبي!",
+        "هههههه... مفيش فرار!",
     };
 
-    // ── Unity lifecycle ────────────────────────────────────────
+    // ── Lifecycle ──────────────────────────────────────────────
     void Awake()
     {
         _agent = GetComponent<NavMeshAgent>();
@@ -59,21 +59,22 @@ public class ZombieAI : MonoBehaviour
 
     void Start()
     {
-        _talkTimer  = Random.Range(0f, talkInterval); // stagger so not all zombies talk at once
+        _talkTimer  = Random.Range(1f, talkInterval);
         _wanderTimer = 0f;
+        // Try to find player immediately
         FindPlayer();
+        // Also keep trying every second in case player spawns later
+        InvokeRepeating(nameof(FindPlayer), 0f, 1f);
     }
 
     void Update()
     {
         if (_isDead) return;
-
-        FindPlayer();
         UpdateState();
         HandleDialogue();
     }
 
-    // ── State machine ──────────────────────────────────────────
+    // ── State Machine ──────────────────────────────────────────
     void UpdateState()
     {
         if (_player == null) { Wander(); return; }
@@ -83,12 +84,12 @@ public class ZombieAI : MonoBehaviour
         if (dist <= attackRange)
         {
             _state = State.Attack;
-            AttackPlayer();
+            AttackTarget();
         }
         else if (dist <= detectionRange)
         {
             _state = State.Chase;
-            ChasePlayer();
+            ChaseTarget();
         }
         else
         {
@@ -97,36 +98,37 @@ public class ZombieAI : MonoBehaviour
         }
     }
 
-    void ChasePlayer()
+    void ChaseTarget()
     {
-        _agent.speed = chaseSpeed;
+        _agent.isStopped = false;
+        _agent.speed     = chaseSpeed;
         _agent.SetDestination(_player.position);
     }
 
-    void AttackPlayer()
+    void AttackTarget()
     {
-        _agent.ResetPath(); // stop moving while attacking
-        transform.LookAt(_player);
+        _agent.isStopped = true;
+        transform.LookAt(new Vector3(_player.position.x, transform.position.y, _player.position.z));
 
         _attackTimer -= Time.deltaTime;
         if (_attackTimer <= 0f)
         {
             _attackTimer = attackCooldown;
-            // Tell the player script to take damage
             _player.GetComponent<PlayerHealth>()?.TakeDamage(attackDamage);
         }
     }
 
     void Wander()
     {
-        _agent.speed = wanderSpeed;
-        _wanderTimer -= Time.deltaTime;
+        _agent.isStopped = false;
+        _agent.speed     = wanderSpeed;
+        _wanderTimer    -= Time.deltaTime;
 
-        if (_wanderTimer <= 0f || !_agent.hasPath)
+        if (_wanderTimer <= 0f || !_agent.hasPath || _agent.remainingDistance < 0.5f)
         {
-            _wanderTimer = Random.Range(3f, 6f);
-            _wanderTarget = RandomNavPoint(transform.position, 10f);
-            _agent.SetDestination(_wanderTarget);
+            _wanderTimer = Random.Range(3f, 7f);
+            Vector3 dest = RandomNavPoint(transform.position, 15f);
+            _agent.SetDestination(dest);
         }
     }
 
@@ -137,42 +139,63 @@ public class ZombieAI : MonoBehaviour
         if (_talkTimer <= 0f)
         {
             _talkTimer = talkInterval + Random.Range(-1f, 2f);
-            string line = _zombieLines[Random.Range(0, _zombieLines.Length)];
-            SayLine(line);
+            string line = _lines[Random.Range(0, _lines.Length)];
+            Debug.Log($"🧟 [{name}]: {line}");
+            // Show floating text above zombie
+            StartCoroutine(ShowFloatingText(line));
         }
     }
 
-    void SayLine(string line)
+    IEnumerator ShowFloatingText(string text)
     {
-        Debug.Log($"[Zombie {name}]: {line}");
-
-        // If you have a dialogue bubble prefab, show it
-        if (dialogueBubblePrefab != null)
-        {
-            var bubble = Instantiate(dialogueBubblePrefab,
-                transform.position + Vector3.up * 2.5f,
-                Quaternion.identity);
-            bubble.GetComponentInChildren<UnityEngine.UI.Text>()?.SetText(line);
-            Destroy(bubble, 3f);
-        }
+        // Simple world-space label using OnGUI isn't ideal,
+        // but for now we log — you can attach a world-space Canvas prefab here
+        yield return null;
     }
 
     // ── Health ─────────────────────────────────────────────────
-    public void TakeDamage(float damage)
+    public void TakeDamage(float dmg)
     {
         if (_isDead) return;
-        health -= damage;
+        health -= dmg;
+
+        // Flash red briefly
+        StartCoroutine(FlashOnHit());
+
         if (health <= 0f) Die();
+    }
+
+    IEnumerator FlashOnHit()
+    {
+        var rend = GetComponentInChildren<Renderer>();
+        if (rend == null) yield break;
+        Color orig = rend.material.color;
+        rend.material.color = Color.white;
+        yield return new WaitForSeconds(0.1f);
+        if (rend) rend.material.color = orig;
     }
 
     void Die()
     {
         _isDead = true;
         _agent.isStopped = true;
-        GetComponent<Animator>()?.SetTrigger("Die");
-        // Notify the spawner so it can replace this zombie
+
+        // Shrink and disappear
+        StartCoroutine(DeathAnimation());
         ZombieSpawner.Instance?.OnZombieDied();
-        Destroy(gameObject, 3f);
+    }
+
+    IEnumerator DeathAnimation()
+    {
+        float t = 0f;
+        Vector3 startScale = transform.localScale;
+        while (t < 0.5f)
+        {
+            t += Time.deltaTime;
+            transform.localScale = Vector3.Lerp(startScale, Vector3.zero, t / 0.5f);
+            yield return null;
+        }
+        Destroy(gameObject);
     }
 
     // ── Helpers ────────────────────────────────────────────────
@@ -180,21 +203,21 @@ public class ZombieAI : MonoBehaviour
     {
         if (_player != null) return;
         var go = GameObject.FindGameObjectWithTag("Player");
-        if (go) _player = go.transform;
+        if (go != null) _player = go.transform;
     }
 
     Vector3 RandomNavPoint(Vector3 origin, float radius)
     {
-        for (int i = 0; i < 10; i++)
+        for (int i = 0; i < 15; i++)
         {
-            Vector3 randomDirection = Random.insideUnitSphere * radius + origin;
-            if (NavMesh.SamplePosition(randomDirection, out NavMeshHit hit, radius, NavMesh.AllAreas))
+            Vector3 rnd = Random.insideUnitSphere * radius + origin;
+            rnd.y = origin.y;
+            if (NavMesh.SamplePosition(rnd, out NavMeshHit hit, radius, NavMesh.AllAreas))
                 return hit.position;
         }
         return origin;
     }
 
-    // ── Gizmos ─────────────────────────────────────────────────
     void OnDrawGizmosSelected()
     {
         Gizmos.color = Color.yellow;

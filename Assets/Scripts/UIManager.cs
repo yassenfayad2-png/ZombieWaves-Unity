@@ -1,28 +1,27 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 
 /// <summary>
-/// UIManager — shows wave banners, messages, and game-over screen.
+/// UIManager — يتحكم في كل الواجهة: موجات، رسائل، game over.
 /// </summary>
 public class UIManager : MonoBehaviour
 {
     public static UIManager Instance { get; private set; }
 
-    [Header("HUD")]
-    public Text  waveText;          // "الموجة 3"
-    public Text  messageText;       // temporary messages
-    public float messageDuration = 3f;
+    [Header("Texts")]
+    public Text waveText;
+    public Text messageText;
 
-    [Header("Wave Banner")]
+    [Header("Panels")]
     public GameObject waveBannerPanel;
     public Text       waveBannerText;
-
-    [Header("Game Over")]
     public GameObject gameOverPanel;
     public Text       finalWaveText;
 
-    private int _lastWave;
+    private int   _lastWave;
+    private Coroutine _msgCoroutine;
 
     void Awake()
     {
@@ -33,39 +32,40 @@ public class UIManager : MonoBehaviour
     public void ShowWaveBanner(int wave)
     {
         _lastWave = wave;
-        if (waveText)       waveText.text       = $"الموجة {wave}";
-        if (waveBannerText) waveBannerText.text  = $"الموجة {wave} — استعد!";
-        if (waveBannerPanel) StartCoroutine(ShowThenHide(waveBannerPanel, 3f));
+        if (waveText)       waveText.text      = $"الموجة {wave}";
+        if (waveBannerText) waveBannerText.text = $"⚡ الموجة {wave} — استعد!";
+        if (waveBannerPanel) StartCoroutine(BannerRoutine());
+    }
+
+    IEnumerator BannerRoutine()
+    {
+        waveBannerPanel.SetActive(true);
+        yield return new WaitForSeconds(3f);
+        waveBannerPanel.SetActive(false);
     }
 
     public void ShowMessage(string msg)
     {
         if (!messageText) return;
+        if (_msgCoroutine != null) StopCoroutine(_msgCoroutine);
         messageText.text = msg;
-        StartCoroutine(ClearMessage());
+        _msgCoroutine = StartCoroutine(ClearAfter(3f));
     }
 
-    System.Collections.IEnumerator ClearMessage()
+    IEnumerator ClearAfter(float sec)
     {
-        yield return new WaitForSeconds(messageDuration);
+        yield return new WaitForSeconds(sec);
         if (messageText) messageText.text = "";
-    }
-
-    System.Collections.IEnumerator ShowThenHide(GameObject panel, float seconds)
-    {
-        panel.SetActive(true);
-        yield return new WaitForSeconds(seconds);
-        panel.SetActive(false);
     }
 
     public void ShowGameOver()
     {
         if (gameOverPanel) gameOverPanel.SetActive(true);
-        if (finalWaveText) finalWaveText.text = $"وصلت للموجة {_lastWave}!";
-        Time.timeScale = 0f;  // pause
+        if (finalWaveText) finalWaveText.text = $"وصلت للموجة {_lastWave} 💪";
+        Time.timeScale = 0f;
     }
 
-    // Called by Restart button
+    // زر إعادة اللعب
     public void Restart()
     {
         Time.timeScale = 1f;
